@@ -59,36 +59,7 @@ curl -s "http://127.0.0.1:8000/notifications?authorId=author1"
 
 ## Architecture
 
-```
- POST /events {postId, likerName, authorId}
-        │
-        ▼
- ┌─────────────────┐     append ts, prune > 60s
- │ persist event   │────────────────────────────►  Sliding window (in memory)
- │   (SQLite)      │                                per post: deque[timestamps]
- └────────┬────────┘                                        │ count = live likes
-          │                                                 ▼
-          │                                   count < 10 ?  ── yes ─┐
-          │                                        │ no             │
-          ▼                                        ▼                ▼
-  (already buffered? ── yes ─► add to buffer)  enter BUFFERED   INDIVIDUAL mode
-                                               + arm 30s timer  emit immediately
-                                                    │                │
-   Per-post buffer (in memory)                      │                │
-   {author, first_liker, count} ◄───── add ─────────┘                │
-            │                                                         │
-            │  every 30s: flush timer fires                          │
-            ▼                                                         ▼
-   count==1 -> individual format          ┌──────────────────────────────────┐
-   count>=2 -> "first and N others"       │ persist notification (SQLite)     │
-            │                              │ append line to notifications.log  │
-            ▼                              │   HH:MM:SS \t message \t type     │
-   re-check rate:                          └──────────────────────────────────┘
-     still >=10 -> re-arm timer                          │
-     dropped    -> drop timer, back to individual        ▼
-                                              GET /notifications?authorId=
-                                              (newest first)
-```
+![Notofocation Batcher](./notification.png)
 
 ---
 
